@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-
+from .._version import LONG_VERSION_PY
 from .exceptions import NotSignedInError
 from ..namespace import Namespace
 from .endpoint import (
@@ -44,6 +44,7 @@ _PRODUCT_TO_REST_VERSION = {
     "9.0": "2.0",
 }
 
+client_version_header = "X-TableauServerClient-Version"
 
 class Server(object):
     class PublishMode:
@@ -51,7 +52,7 @@ class Server(object):
         Overwrite = "Overwrite"
         CreateNew = "CreateNew"
 
-    def __init__(self, server_address, use_server_version=True):
+    def __init__(self, server_address, use_server_version=True, http_options_dict=None):
         self._server_address = server_address
         self._auth_token = None
         self._site_id = None
@@ -59,7 +60,7 @@ class Server(object):
         self._session = requests.Session()
         self._http_options = dict()
 
-        self.version = "2.3"
+        self.version = LONG_VERSION_PY
         self.auth = Auth(self)
         self.views = Views(self)
         self.users = Users(self)
@@ -85,14 +86,24 @@ class Server(object):
         self._namespace = Namespace()
         self.flow_runs = FlowRuns(self)
 
+        # must set this before calling use_server_version, because that's a server call
+        if http_options_dict:
+            self.add_http_options(http_options_dict)
+            self.add_http_version_header()
+
         if use_server_version:
             self.use_server_version()
 
     def add_http_options(self, options_dict):
         self._http_options.update(options_dict)
 
+    def add_http_version_header(self):
+        if not self._http_options[client_version_header]:
+            self._http_options.update({client_version_header: self.version})
+
     def clear_http_options(self):
         self._http_options = dict()
+        self.add_http_version_header()
 
     def _clear_auth(self):
         self._site_id = None

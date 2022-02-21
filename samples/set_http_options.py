@@ -39,12 +39,13 @@ def main():
     logging_level = getattr(logging, args.logging_level.upper())
     logging.basicConfig(level=logging_level)
 
-    # Step 1: Create required objects for sign in
+    # Step 1: Create required objects for sign in.
+    # During server initialization, set the server to ignore certificates
     tableau_auth = TSC.PersonalAccessTokenAuth(args.token_name, args.token_value, site_id=args.site)
-    server = TSC.Server(args.server)
+    server = TSC.Server(args.server, use_server_version=True, http_options_dict={"verify": False})
 
-    # Step 2: Set http options to disable verifying SSL
-    server.add_http_options({"verify": False})
+    # Step 2: We can also update http options after creating the server.
+    server.add_http_options({"X-Script-Target-Version": "3.16"})
 
     with server.auth.sign_in(tableau_auth):
 
