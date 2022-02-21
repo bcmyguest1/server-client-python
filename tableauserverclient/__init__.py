@@ -50,8 +50,3 @@ from .server import (
     NotSignedInError,
     Pager,
 )
-from ._version import get_versions
-
-__version__ = get_versions()["version"]
-__VERSION__ = __version__
-del get_versions

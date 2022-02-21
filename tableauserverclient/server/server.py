@@ -1,5 +1,4 @@
 import xml.etree.ElementTree as ET
-from .._version import LONG_VERSION_PY
 from .exceptions import NotSignedInError
 from ..namespace import Namespace
 from .endpoint import (
@@ -32,6 +31,10 @@ from .endpoint.exceptions import (
     ServerInfoEndpointNotFoundError,
 )
 
+from tableauserverclient._version import get_versions
+__TSC_VERSION__ = get_versions()["version"]
+del get_versions
+
 import requests
 
 from distutils.version import LooseVersion as Version
@@ -43,8 +46,10 @@ _PRODUCT_TO_REST_VERSION = {
     "9.1": "2.0",
     "9.0": "2.0",
 }
-
+minimum_supported_server_version = "2.3"
+default_server_version = "2.3"
 client_version_header = "X-TableauServerClient-Version"
+
 
 class Server(object):
     class PublishMode:
@@ -60,7 +65,7 @@ class Server(object):
         self._session = requests.Session()
         self._http_options = dict()
 
-        self.version = LONG_VERSION_PY
+        self.version = default_server_version
         self.auth = Auth(self)
         self.views = Views(self)
         self.users = Users(self)
@@ -99,7 +104,7 @@ class Server(object):
 
     def add_http_version_header(self):
         if not self._http_options[client_version_header]:
-            self._http_options.update({client_version_header: self.version})
+            self._http_options.update({client_version_header: __TSC_VERSION__})
 
     def clear_http_options(self):
         self._http_options = dict()
