@@ -26,7 +26,7 @@ class BugFix273(unittest.TestCase):
 
         server_response = FakeResponse()
 
-        self.assertEqual(Endpoint._safe_to_log(server_response), "[Truncated File Contents]")
+        self.assertEqual(Endpoint._safely_log(server_response), False)
 
 
 class FileSysHelpers(unittest.TestCase):

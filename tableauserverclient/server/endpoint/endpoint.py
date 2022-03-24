@@ -34,15 +34,26 @@ class Endpoint(object):
         return headers
 
     @staticmethod
-    def _safe_to_log(server_response):
-        """Checks if the server_response content is not xml (eg binary image or zip)
-        and replaces it with a constant
+    def _safely_log(server_response):
+        """Checks if the server_response content is text
+        and replaces it with a constant if not (e.g. binary image or zip)
         """
-        ALLOWED_CONTENT_TYPES = ("application/xml", "application/xml;charset=utf-8")
-        if server_response.headers.get("Content-Type", None) not in ALLOWED_CONTENT_TYPES:
-            return "[Truncated File Contents]"
+        ALLOWED_MEDIA_TYPES = ("text")
+        ALLOWED_CONTENT_TYPES = ("application/xml", "application/xml;charset=utf-8", "application/json")
+        received_content_type = server_response.headers.get("Content-Type", None)
+        media_type = (received_content_type and received_content_type.split('/')[0]) or None
+        if (media_type and media_type not in ALLOWED_MEDIA_TYPES) \
+                and (received_content_type and received_content_type not in ALLOWED_CONTENT_TYPES):
+            logger.debug("{}: [Truncated File Contents]".format(received_content_type))
+            return False
+        elif not server_response.encoding:
+            logger.debug("(No encoding): [Truncated File Contents]")
+            return False
         else:
-            return server_response.content
+            logger.debug(
+                "Server response:\n\t{0}".format(server_response.content.decode(server_response.encoding))
+            )
+            return len(server_response.content) > 0
 
     def _make_request(
         self,
@@ -55,7 +66,7 @@ class Endpoint(object):
     ):
         parameters = parameters or {}
         parameters.update(self.parent_srv.http_options)
-        if not "headers" in parameters:
+        if "headers" not in parameters:
             parameters["headers"] = {}
         parameters["headers"].update(Endpoint._make_common_headers(auth_token, content_type))
 
@@ -68,27 +79,25 @@ class Endpoint(object):
 
         server_response = method(url, **parameters)
         self.parent_srv._namespace.detect(server_response.content)
+        self._safely_log(server_response)
         self._check_status(server_response)
-
-        # This check is to determine if the response is a text response (xml or otherwise)
-        # so that we do not attempt to log bytes and other binary data.
-        if len(server_response.content) > 0 and server_response.encoding:
-            logger.debug(
-                "Server response from {0}:\n\t{1}".format(url, server_response.content.decode(server_response.encoding))
-            )
         return server_response
 
     def _check_status(self, server_response):
+        received_content_type = server_response.headers.get("Content-Type", None)
+        # the server can send back a 200 OK response with a html page during scheduled downtime
+        # I don't believe we ever *expect* html
+        if received_content_type == "text/html":
+            raise NonXMLResponseError(server_response.content)
+
         if server_response.status_code >= 500:
             raise InternalServerError(server_response)
         elif server_response.status_code not in Success_codes:
             try:
                 raise ServerResponseError.from_response(server_response.content, self.parent_srv.namespace)
             except ParseError:
-                # This will happen if we get a non-success HTTP code that
-                # doesn't return an xml error object (like metadata endpoints)
-                # we convert this to a better exception and pass through the raw
-                # response body
+                # This will happen if the server returns something other than XML (like metadata endpoints)
+                # we convert this to a better exception and pass through the raw response body
                 raise NonXMLResponseError(server_response.content)
             except Exception:
                 # anything else re-raise here
@@ -115,7 +124,7 @@ class Endpoint(object):
         )
 
     def delete_request(self, url):
-        # We don't return anything for a delete
+        # We don't return anything for delete
         self._make_request(self.parent_srv.session.delete, url, auth_token=self.parent_srv.auth_token)
 
     def put_request(self, url, xml_request=None, content_type="text/xml", parameters=None):
