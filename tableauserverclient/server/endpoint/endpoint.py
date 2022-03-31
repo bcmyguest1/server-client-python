@@ -2,7 +2,7 @@ import logging
 from distutils.version import LooseVersion as Version
 from functools import wraps
 from xml.etree.ElementTree import ParseError
-
+from ..._version import LONG_VERSION_PY
 from .exceptions import (
     ServerResponseError,
     InternalServerError,
@@ -10,6 +10,7 @@ from .exceptions import (
     EndpointUnavailableError,
 )
 from ..query import QuerySet
+import tableauserverclient as tsc
 
 logger = logging.getLogger("tableau.endpoint")
 
@@ -30,6 +31,7 @@ class Endpoint(object):
             headers["x-tableau-auth"] = auth_token
         if content_type is not None:
             headers["content-type"] = content_type
+        headers["User-Agent"] = "Tableau Server Client" + "(" + tsc.__version__ + ")"
 
         return headers
 
@@ -38,21 +40,20 @@ class Endpoint(object):
         """Checks if the server_response content is text
         and replaces it with a constant if not (e.g. binary image or zip)
         """
-        ALLOWED_MEDIA_TYPES = ("text")
+        ALLOWED_MEDIA_TYPES = "text"
         ALLOWED_CONTENT_TYPES = ("application/xml", "application/xml;charset=utf-8", "application/json")
         received_content_type = server_response.headers.get("Content-Type", None)
-        media_type = (received_content_type and received_content_type.split('/')[0]) or None
-        if (media_type and media_type not in ALLOWED_MEDIA_TYPES) \
-                and (received_content_type and received_content_type not in ALLOWED_CONTENT_TYPES):
+        media_type = (received_content_type and received_content_type.split("/")[0]) or None
+        if (media_type and media_type not in ALLOWED_MEDIA_TYPES) and (
+            received_content_type and received_content_type not in ALLOWED_CONTENT_TYPES
+        ):
             logger.debug("{}: [Truncated File Contents]".format(received_content_type))
             return False
         elif not server_response.encoding:
             logger.debug("(No encoding): [Truncated File Contents]")
             return False
         else:
-            logger.debug(
-                "Server response:\n\t{0}".format(server_response.content.decode(server_response.encoding))
-            )
+            logger.debug("Server response:\n\t{0}".format(server_response.content.decode(server_response.encoding)))
             return len(server_response.content) > 0
 
     def _make_request(
